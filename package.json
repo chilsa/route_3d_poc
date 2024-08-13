@@ -21,6 +21,7 @@
     "d3-interpolate": "^3.0.1",
     "lodash": "^4.17.21",
     "maplibre-gl": "^4.5.1",
-    "three": "^0.167.1"
+    "three": "^0.167.1",
+    "vite-plugin-static-copy": "^1.0.6"
   }
 }
