@@ -152,7 +152,7 @@ function renderPaths(maplibre, features) {
 			'fill-extrusion-color': ['get', 'color'],
 			'fill-extrusion-height': ['get', 'height'],
 			'fill-extrusion-base': ['get', 'base_height'],
-			'fill-extrusion-opacity': 0.8
+			//'fill-extrusion-opacity': 0.8
 		}
 	});
 }

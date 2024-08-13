@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "start": "vite",
-    "build": "vite build --base=/route_3d_poc/dist/",
+    "build": "vite build",
     "preview": "vite preview"
   },
   "author": "",
