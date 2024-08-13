@@ -5,8 +5,36 @@ import {renderBuilding} from "./utils/render_building";
 
 const map = (window.map = new maplibregl.Map({
 	container: 'map',
-	style:
-		'https://api.maptiler.com/maps/basic/style.json?key=get_your_own_OpIi9ZULNHzrESv6T2vL',
+	style: {
+		'id': 'raster',
+		'version': 8,
+		'name': 'Raster tiles',
+		'center': [0, 0],
+		'zoom': 0,
+		'sources': {
+			'raster-tiles': {
+				'type': 'raster',
+				'tiles': ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+				'tileSize': 256,
+				'minzoom': 0,
+				'maxzoom': 19
+			}
+		},
+		'layers': [
+			{
+				'id': 'background',
+				'type': 'background',
+				'paint': {
+					'background-color': '#e0dfdf'
+				}
+			},
+			{
+				'id': 'simple-tiles',
+				'type': 'raster',
+				'source': 'raster-tiles'
+			}
+		]
+	},
 	center: [-87.61578392215847, 41.86784341172856],
 	zoom: 16,
 	pitch: 60,
