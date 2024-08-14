@@ -5,14 +5,3 @@ export async function loadGeoJson() {
 	}
 	return await response.json();
 }
-
-export async function loadSprite(maplibre, name, url) {
-	if (!maplibre.hasImage(name)) {
-		try {
-			const image = await maplibre.loadImage(url);
-			maplibre.addImage(name, image.data);
-		} catch (e) {
-			console.error(e);
-		}
-	}
-}
