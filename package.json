@@ -16,7 +16,7 @@
   "dependencies": {
     "@turf/buffer": "^7.0.0",
     "@turf/center": "^7.0.0",
-    "@turf/circle": "^7.0.0",
+    "@turf/destination": "^7.1.0",
     "@turf/helpers": "^7.0.0",
     "d3-interpolate": "^3.0.1",
     "lodash": "^4.17.21",

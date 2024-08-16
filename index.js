@@ -45,4 +45,5 @@ const map = (window.map = new maplibregl.Map({
 map.on('style.load', async () => {
 	await renderBuilding(map);
 	await renderRoute(map);
+	map.on('click', console.log);
 });

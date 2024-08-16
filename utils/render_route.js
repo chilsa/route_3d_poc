@@ -1,6 +1,7 @@
-import {lineString, points} from "@turf/helpers";
+import {lineString, points, point, polygon} from "@turf/helpers";
 import {buffer} from "@turf/buffer";
 import {center} from "@turf/center";
+import {destination} from "@turf/destination";
 import maplibregl from "maplibre-gl";
 import * as THREE from "three";
 import _ from 'lodash';
@@ -65,7 +66,7 @@ const paths = [{
 			"text": "Out from lift and walk straight",
 			"time": 3083,
 			"floor_id": "2cdd6174730d4431b1aa730eda596ed4",
-			"ordinal": 2,
+			"ordinal": 1,
 			"street_name": "",
 			"type": null
 		},
@@ -79,6 +80,48 @@ const paths = [{
 			"text": "Turn Right and walk straight to the destination",
 			"time": 1613,
 			"floor_id": "2cdd6174730d4431b1aa730eda596ed4",
+			"ordinal": 1,
+			"street_name": "",
+			"type": null
+		},
+		{
+			"venue_id": "9f0af5f1758040008a7b112d041c0977",
+			"building_id": "tsuenwanplaza_hk_369d01",
+			"distance": 2.241,
+			"heading": 0,
+			"sign": 100,
+			"interval": [5, 6],
+			"text": "Turn Right and walk straight to the destination",
+			"time": 1613,
+			"floor_id": "2cdd6174730d4431b1aa730eda596ed4",
+			"ordinal": 1,
+			"street_name": "",
+			"type": null
+		},
+		{
+			"venue_id": "9f0af5f1758040008a7b112d041c0977",
+			"building_id": "tsuenwanplaza_hk_369d01",
+			"distance": 2.241,
+			"heading": 0,
+			"sign": 0,
+			"interval": [6, 7],
+			"text": "Turn Right and walk straight to the destination",
+			"time": 1613,
+			"floor_id": "2cdd6174730d4431b1aa730eda596ed4",
+			"ordinal": 2,
+			"street_name": "",
+			"type": null
+		},
+		{
+			"venue_id": "9f0af5f1758040008a7b112d041c0977",
+			"building_id": "tsuenwanplaza_hk_369d01",
+			"distance": 2.241,
+			"heading": 0,
+			"sign": 0,
+			"interval": [7, 8],
+			"text": "Turn Right and walk straight to the destination",
+			"time": 1613,
+			"floor_id": "2cdd6174730d4431b1aa730eda596ed4",
 			"ordinal": 2,
 			"street_name": "",
 			"type": null
@@ -89,14 +132,15 @@ const paths = [{
 			"distance": 0,
 			"heading": 0,
 			"sign": 4,
-			"interval": [5, 5],
+			"interval": [8, 8],
 			"text": "Arrive at destination",
 			"time": 0,
 			"floor_id": "e7067d79ac7e47a7835965bb1e46ac6b",
 			"ordinal": 2,
 			"street_name": "",
 			"type": null
-		}],
+		},
+	],
 	"points": {
 		"coordinates": [
 			[-87.61702191869324, 41.865332260722425],
@@ -104,7 +148,10 @@ const paths = [{
 			[-87.61570479030358, 41.8662492712956],
 			[-87.61557591779658, 41.86624606863293],
 			[-87.61703942291355, 41.866246675348975],
-			[-87.61705742344037, 41.86676639127796]
+			[-87.61705892436883, 41.86665937995096],
+			[-87.61705742344037, 41.86676639127796],
+			[-87.61708220141612, 41.86646212362754],
+			[-87.61809728994754, 41.866462761717656]
 		],
 		"type": "LineString"
 	},
@@ -117,27 +164,43 @@ const {instructions, points: {coordinates}} = paths[0];
 
 export async function renderRoute(maplibre) {
 	const pathFeatures = instructions.slice(0, instructions.length - 1).map((instruction, index) => {
-		const {interval: [start, end], ordinal, sign, text} = instruction;
+		const {interval: [start, end], ordinal, sign} = instruction;
 		const nextOrdinal = instructions[index + 1].ordinal;
-		const lineFeature = lineString(
-			coordinates.slice(start, end + 1),
-			{
+		let lineFeature;
+		
+		if (isConnector(sign)) {
+			const center = coordinates[end];
+			const vertexes = [45, 135, 225, 315].map(angle => {
+				const pointFeature = destination(point(center), 3, angle, {units: "meters"});
+				return pointFeature.geometry.coordinates;
+			});
+			lineFeature = polygon([[...vertexes, vertexes[0]]], {
 				color: "#ea580c",
-				height: isConnector(sign) ? nextOrdinal * 100 : ordinal * 100 + 0.5,
+				height: nextOrdinal * 100,
 				"base_height": ordinal * 100
-			},
-		);
-		return buffer(lineFeature, 2, {units: "meters"});
+			});
+		} else {
+			lineFeature = lineString(
+				coordinates.slice(start, end + 1),
+				{
+					color: "#ea580c",
+					height: ordinal * 100 + 0.5,
+					"base_height": ordinal * 100
+				},
+			);
+			lineFeature = buffer(lineFeature, 2, {units: "meters"});
+		}
+		
+		return lineFeature;
 	});
-	
-	renderPaths(maplibre, pathFeatures);
-	await renderPointsAndArrowDirects(
+	renderPathsLayer(maplibre, pathFeatures);
+	await renderPointsAndArrows(
 		maplibre,
 		paths[0]
 	);
 }
 
-function renderPaths(maplibre, features) {
+function renderPathsLayer(maplibre, features) {
 	maplibre.addLayer({
 		id: "lift-extrusion",
 		type: "fill-extrusion",
@@ -157,7 +220,7 @@ function renderPaths(maplibre, features) {
 	});
 }
 
-async function renderPointsAndArrowDirects(maplibre, path) {
+async function renderPointsAndArrows(maplibre, path) {
 	const {instructions, points: {coordinates}} = path;
 	
 	// 以路线中心作为世界坐标系原点
@@ -185,14 +248,14 @@ async function renderPointsAndArrowDirects(maplibre, path) {
 	const arrowTexture = loader.load(arrowUp);
 	const arrowPlane = new THREE.Mesh(
 		new THREE.PlaneGeometry(1, 1),
-		new THREE.MeshBasicMaterial({map: arrowTexture, side: THREE.DoubleSide,  transparent: true })
+		new THREE.MeshBasicMaterial({map: arrowTexture, side: THREE.DoubleSide, transparent: true})
 	);
 	
 	const customLayer = {
 		id: 'points-3d-model',
 		type: 'custom',
 		renderingMode: '3d',
-		onAdd (map, gl) {
+		onAdd(map, gl) {
 			this.map = map;
 			this.scene = new THREE.Scene();
 			// In threejs, y points up - we're rotating the scene such that it's y points along maplibre's up.
@@ -219,9 +282,9 @@ async function renderPointsAndArrowDirects(maplibre, path) {
 					const temArrModel = arrowPlane.clone();
 					const position = identifier === "connector"
 						? [
-							coordinates[0] - 5,
-							coordinates[1] + 2,
-							coordinates[2] - 2
+							coordinates[0] - 3,
+							coordinates[1] + 3,
+							coordinates[2]
 						]
 						: [
 							coordinates[0],
@@ -231,9 +294,9 @@ async function renderPointsAndArrowDirects(maplibre, path) {
 					const next = pArr[i + 1].coordinates;
 					const nextP = identifier === "connector"
 						? [
-							next[0] - 5,
-							next[1] + 2,
-							next[2] - 2
+							next[0] - 3,
+							coordinates[1] + 3,
+							coordinates[2]
 						]
 						: [
 							next[0],
@@ -243,8 +306,12 @@ async function renderPointsAndArrowDirects(maplibre, path) {
 					temArrModel.position.set(...position);
 					temArrModel.lookAt(new THREE.Vector3(...nextP));
 					arrowPlane.scale.set(scaleFactor * 0.5, scaleFactor * 0.5, scaleFactor * 0.5);
-					// 按照路径方向旋转图片，使其朝向路径方向；默认方向为向上
-					temArrModel.rotateX(Math.PI / 2);
+					if (identifier === "path") {
+						// 按照路径方向旋转图片，使其朝向路径方向；默认方向为向上
+						temArrModel.rotateX(Math.PI / 2);
+					} else {
+						temArrModel.rotateY(Math.PI / 2);
+					}
 					
 					this.scene.add(temArrModel);
 				}
@@ -253,7 +320,7 @@ async function renderPointsAndArrowDirects(maplibre, path) {
 			const light = new THREE.AmbientLight(0xffffff); // 环境光，照亮场景里的所有物体
 			this.scene.add(light);
 		},
-		render (gl, matrix) {
+		render(gl, matrix) {
 			const mlMatrix4 = new THREE.Matrix4().fromArray(matrix);
 			
 			this.camera.projectionMatrix = mlMatrix4.multiply(sceneMatrix4);
@@ -338,4 +405,23 @@ function fromLngLatToSceneCoord(origin, lngLat, altitude) {
 		(mercator.z - origin.z) * unit,
 		-(mercator.y - origin.y) * unit
 	]
+}
+
+function renderPoints(maplibre, features) {
+	maplibre.addSource("test-p", {
+		type: "geojson",
+		data: {
+			type: "FeatureCollection",
+			features
+		}
+	});
+	maplibre.addLayer({
+		id: "test-p-layer",
+		type: "circle",
+		source: "test-p",
+		paint: {
+			"circle-radius": 3,
+			"circle-color": "blue"
+		}
+	});
 }
