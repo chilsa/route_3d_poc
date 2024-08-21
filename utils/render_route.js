@@ -1,12 +1,12 @@
+import maplibregl from "maplibre-gl";
+import _ from 'lodash';
+import * as THREE from "three";
+import {GLTFLoader} from "three/addons/loaders/GLTFLoader";
+import {interpolate, interpolateArray} from "d3-interpolate";
 import {lineString, points, point, polygon} from "@turf/helpers";
 import {buffer} from "@turf/buffer";
 import {center} from "@turf/center";
 import {destination} from "@turf/destination";
-import maplibregl from "maplibre-gl";
-import * as THREE from "three";
-import _ from 'lodash';
-import {GLTFLoader} from "three/addons/loaders/GLTFLoader";
-import {interpolate, interpolateArray} from "d3-interpolate";
 import arrowUp from "../imgs/arrow_up.png";
 
 const paths = [{
@@ -160,16 +160,22 @@ const paths = [{
 		"type": "LineString"
 	}
 }];
-const {instructions, points: {coordinates}} = paths[0];
 
 export async function renderRoute(maplibre) {
-	const pathFeatures = instructions.slice(0, instructions.length - 1).map((instruction, index) => {
+	renderPathsLayer(maplibre, paths[0]);
+	await render3DModals(maplibre, paths[0]);
+}
+
+function renderPathsLayer(maplibre, path) {
+	const {instructions, points: {coordinates}} = path;
+	const features = instructions.slice(0, instructions.length - 1).map((instruction, index) => {
 		const {interval: [start, end], ordinal, sign} = instruction;
 		const nextOrdinal = instructions[index + 1].ordinal;
 		let lineFeature;
 		
 		if (isConnector(sign)) {
 			const center = coordinates[end];
+			// 计算一个以电梯坐标为中心点的正方形的四个顶点，把电梯渲染成一个立方体
 			const vertexes = [45, 135, 225, 315].map(angle => {
 				const pointFeature = destination(point(center), 3, angle, {units: "meters"});
 				return pointFeature.geometry.coordinates;
@@ -180,6 +186,7 @@ export async function renderRoute(maplibre) {
 				"base_height": ordinal * 100
 			});
 		} else {
+			// 把路径渲染成宽4米高0.5米的立体线条
 			lineFeature = lineString(
 				coordinates.slice(start, end + 1),
 				{
@@ -193,14 +200,7 @@ export async function renderRoute(maplibre) {
 		
 		return lineFeature;
 	});
-	renderPathsLayer(maplibre, pathFeatures);
-	await renderPointsAndArrows(
-		maplibre,
-		paths[0]
-	);
-}
-
-function renderPathsLayer(maplibre, features) {
+	
 	maplibre.addLayer({
 		id: "lift-extrusion",
 		type: "fill-extrusion",
@@ -214,14 +214,13 @@ function renderPathsLayer(maplibre, features) {
 		paint: {
 			'fill-extrusion-color': ['get', 'color'],
 			'fill-extrusion-height': ['get', 'height'],
-			'fill-extrusion-base': ['get', 'base_height'],
-			//'fill-extrusion-opacity': 0.8
+			'fill-extrusion-base': ['get', 'base_height']
 		}
 	});
 }
 
-async function renderPointsAndArrows(maplibre, path) {
-	const {instructions, points: {coordinates}} = path;
+async function render3DModals(maplibre, path) {
+	const {points: {coordinates}} = path;
 	
 	// 以路线中心作为世界坐标系原点
 	const centerPointFeature = center(points(coordinates));
@@ -277,7 +276,7 @@ async function renderPointsAndArrows(maplibre, path) {
 			});
 			this.renderer.autoClear = false;
 			
-			const pArr = instructionsToSceneCoordPoints(sceneOriginMercator, instructions, 3);
+			const pArr = getRouteSplits(sceneOriginMercator, path, 3);
 			pArr.forEach(({coordinates, identifier}, i) => {
 				if (i === 0 || i === pArr.length - 1) {
 					const geoModel = markerModel.clone();
@@ -359,7 +358,9 @@ function addConnectorArrows(position, nextPosition, texture) {
 	return [...xTextures, ...zTextures];
 }
 
-function instructionsToSceneCoordPoints(originPoint, instructions, breakCnt = 0) {
+function getRouteSplits(originPoint, path, breakCnt = 0) {
+	const {instructions, points: {coordinates}} = path;
+	
 	return _.flatMap(instructions, (instruction, i) => {
 		const {interval: [start, end], ordinal: sOrd, sign} = instruction;
 		const next = instructions[i + 1];
@@ -367,7 +368,7 @@ function instructionsToSceneCoordPoints(originPoint, instructions, breakCnt = 0)
 		if (start === end) {
 			return [
 				{
-					coordinates: fromLngLatToSceneCoord(originPoint, coordinates[start], eOrd * 100),
+					coordinates: lngLatToWorldCoord(originPoint, coordinates[start], eOrd * 100),
 					identifier: "end"
 				}
 			]
@@ -377,18 +378,18 @@ function instructionsToSceneCoordPoints(originPoint, instructions, breakCnt = 0)
 		const sceneCoordPoints = isConnector(sign)
 			? [
 				{
-					coordinates: fromLngLatToSceneCoord(originPoint, coordinates[end], sOrd * 100),
+					coordinates: lngLatToWorldCoord(originPoint, coordinates[end], sOrd * 100),
 					identifier: "connector"
 				},
 				{
-					coordinates: fromLngLatToSceneCoord(originPoint, coordinates[end], eOrd * 100),
+					coordinates: lngLatToWorldCoord(originPoint, coordinates[end], eOrd * 100),
 					identifier: "connector"
 				}
 			]
 			: coordinates
 				.slice(start, end + 1)
 				.map((c, j) => ({
-					coordinates: fromLngLatToSceneCoord(originPoint, c, interpAltitude(j / cCnt)),
+					coordinates: lngLatToWorldCoord(originPoint, c, interpAltitude(j / cCnt)),
 					identifier: "path"
 				}));
 		
@@ -413,8 +414,9 @@ function isConnector(sign) {
 	return sign === 100 || sign === -100;
 }
 
-// 将莫卡托坐标转换为世界坐标
-function fromLngLatToSceneCoord(origin, lngLat, altitude) {
+// 将莫卡托坐标([x(E), y(N), z(UP)])转换为世界坐标([x(E), y(UP), z(VIEWER)])
+// 莫卡托坐标 rotateX(Math.PI/2) 转换为世界坐标
+function lngLatToWorldCoord(origin, lngLat, altitude) {
 	const mercator = maplibregl.MercatorCoordinate.fromLngLat(lngLat, altitude);
 	const unit = 1.0 / mercator.meterInMercatorCoordinateUnits();
 	return [
