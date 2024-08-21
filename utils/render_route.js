@@ -384,7 +384,7 @@ function getRouteSplits(originPoint, path, breakCnt = 0) {
 		}
 		const interpAltitude = interpolate(sOrd * 100, eOrd * 100);
 		const cCnt = end - start;
-		const sceneCoordPoints = isConnector(sign)
+		const worldCoordPoints = isConnector(sign)
 			? [
 				{
 					coordinates: lngLatToWorldCoord(originPoint, coordinates[end], sOrd * 100),
@@ -401,17 +401,18 @@ function getRouteSplits(originPoint, path, breakCnt = 0) {
 					coordinates: lngLatToWorldCoord(originPoint, c, interpAltitude(j / cCnt)),
 					identifier: "path"
 				}));
+		const distance = calcDistance(worldCoordPoints);
+		const splitCount = Math.floor(distance / 20);
 		
-		return _.flatMap(sceneCoordPoints, ({coordinates, identifier}, j) => {
-			const nextCoord = sceneCoordPoints[j + 1]?.coordinates;
+		return _.flatMap(worldCoordPoints, ({coordinates, identifier}, j) => {
+			const nextCoord = worldCoordPoints[j + 1]?.coordinates;
 			if (!nextCoord) {
 				return i === instructions.length - 1 ? [coordinates] : [];
 			}
-			const splitCnt = breakCnt + 1;
 			const interpVec = interpolateArray(coordinates, nextCoord);
-			return _.times(splitCnt, (k) => {
+			return _.times(splitCount, (k) => {
 				return {
-					coordinates: interpVec(k / splitCnt).slice(),
+					coordinates: interpVec(k / splitCount).slice(),
 					identifier
 				}
 			});
@@ -427,10 +428,24 @@ function isConnector(sign) {
 // 莫卡托坐标 rotateX(Math.PI/2) 转换为世界坐标
 function lngLatToWorldCoord(origin, lngLat, altitude) {
 	const mercator = maplibregl.MercatorCoordinate.fromLngLat(lngLat, altitude);
-	const unit = 1.0 / mercator.meterInMercatorCoordinateUnits();
+	const unit = 1.0 / mercator.meterInMercatorCoordinateUnits(); // 单位长度, 1米在莫卡托坐标系中的长度
 	return [
 		(mercator.x - origin.x) * unit,
 		(mercator.z - origin.z) * unit,
 		-(mercator.y - origin.y) * unit
 	]
+}
+
+function calcDistance(worldCoordPoints) {
+	return worldCoordPoints.reduce((acc, {coordinates}, i) => {
+		const nextCoord = worldCoordPoints[i + 1]?.coordinates;
+		if (!nextCoord) return acc;
+		const [x1, y1, z1] = coordinates;
+		const [x2, y2, z2] = nextCoord;
+		return acc + Math.sqrt(
+			Math.pow(x2 - x1, 2) +
+			Math.pow(y2 - y1, 2) +
+			Math.pow(z2 - z1, 2)
+		);
+	}, 0);
 }
