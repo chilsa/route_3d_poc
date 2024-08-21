@@ -252,6 +252,7 @@ async function renderPointsAndArrows(maplibre, path) {
 	);
 	arrowMesh.scale.set(scaleFactor * 0.5, scaleFactor * 0.5, scaleFactor * 0.5);
 	
+	const markerGroup = new THREE.Group();
 	const pathTextureGroup = new THREE.Group();
 	const connectorTextureGroup = new THREE.Group();
 	
@@ -281,27 +282,22 @@ async function renderPointsAndArrows(maplibre, path) {
 				if (i === 0 || i === pArr.length - 1) {
 					const geoModel = markerModel.clone();
 					geoModel.position.set(coordinates[0], coordinates[1] + 4, coordinates[2]);
-					this.scene.add(geoModel);
+					markerGroup.add(geoModel);
 				} else {
-					const arrow = arrowMesh.clone();
 					const nextCoord = pArr[i + 1].coordinates;
 					
 					if (identifier === "path") {
-						arrow.position.set(coordinates[0], coordinates[1] + 1, coordinates[2]);
-						arrow.lookAt(new THREE.Vector3(nextCoord[0], nextCoord[1] + 1, nextCoord[2]));
-						arrow.rotateX(Math.PI/2);
+						const arrow = addPathArrow(coordinates, nextCoord, arrowMesh);
 						pathTextureGroup.add(arrow);
 					} else {
-						arrow.position.set(coordinates[0] - 3, coordinates[1] + 3, coordinates[2]);
-						arrow.lookAt(new THREE.Vector3(nextCoord[0] - 3, nextCoord[1] + 3, nextCoord[2]));
-						arrow.rotateX(Math.PI/2);
-						arrow.rotateY(Math.PI/2);
-						connectorTextureGroup.add(arrow);
+						const arrowModals = addConnectorArrows(coordinates, nextCoord, arrowMesh);
+						arrowModals.forEach(arrowModal => connectorTextureGroup.add(arrowModal));
 					}
 				}
 			});
 			this.scene.add(pathTextureGroup);
 			this.scene.add(connectorTextureGroup);
+			this.scene.add(markerGroup);
 			
 			const light = new THREE.AmbientLight(0xffffff); // 环境光，照亮场景里的所有物体
 			this.scene.add(light);
@@ -326,6 +322,41 @@ async function loadModel() {
 	);*/
 	const gltf = await loader.loadAsync('./assets/red-point.gltf');
 	return gltf.scene;
+}
+
+function addPathArrow(position, nextPosition, texture) {
+	const arrow = texture.clone();
+	arrow.position.set(position[0], position[1] + 1, position[2]);
+	arrow.lookAt(new THREE.Vector3(nextPosition[0], nextPosition[1] + 1, nextPosition[2]));
+	arrow.rotateX(Math.PI/2);
+	return arrow;
+}
+
+function addConnectorArrows(position, nextPosition, texture) {
+	const xTextures = ["west", "east"].map(direct => {
+		const modal = texture.clone();
+		const originX = direct === "west" ? position[0] - 3 : position[0] + 3;
+		const nextX = direct === "west" ? nextPosition[0] - 3 : nextPosition[0] + 3;
+		
+		modal.position.set(originX, position[1] + 3, position[2]);
+		modal.lookAt(new THREE.Vector3(nextX, nextPosition[1] + 3, nextPosition[2]));
+		
+		modal.rotateX(Math.PI/2);
+		modal.rotateY(Math.PI/2);
+		return modal;
+	});
+	const zTextures = ["south", "north"].map(direct => {
+		const modal = texture.clone();
+		const originZ = direct === "south" ? position[2] - 3 : position[2] + 3;
+		const nextZ = direct === "south" ? nextPosition[2] - 3 : nextPosition[2] + 3;
+		
+		modal.position.set(position[0], position[1] + 3, originZ);
+		modal.lookAt(new THREE.Vector3(nextPosition[0], nextPosition[1] + 3, nextZ));
+		
+		modal.rotateX(Math.PI/2);
+		return modal;
+	});
+	return [...xTextures, ...zTextures];
 }
 
 function instructionsToSceneCoordPoints(originPoint, instructions, breakCnt = 0) {
@@ -391,23 +422,4 @@ function fromLngLatToSceneCoord(origin, lngLat, altitude) {
 		(mercator.z - origin.z) * unit,
 		-(mercator.y - origin.y) * unit
 	]
-}
-
-function renderPoints(maplibre, features) {
-	maplibre.addSource("test-p", {
-		type: "geojson",
-		data: {
-			type: "FeatureCollection",
-			features
-		}
-	});
-	maplibre.addLayer({
-		id: "test-p-layer",
-		type: "circle",
-		source: "test-p",
-		paint: {
-			"circle-radius": 3,
-			"circle-color": "blue"
-		}
-	});
 }
