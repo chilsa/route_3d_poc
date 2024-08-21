@@ -246,10 +246,14 @@ async function renderPointsAndArrows(maplibre, path) {
 	// 创建一个平面几何体来渲染箭头
 	const loader = new THREE.TextureLoader();
 	const arrowTexture = loader.load(arrowUp);
-	const arrowPlane = new THREE.Mesh(
+	const arrowMesh = new THREE.Mesh(
 		new THREE.PlaneGeometry(1, 1),
 		new THREE.MeshBasicMaterial({map: arrowTexture, side: THREE.DoubleSide, transparent: true})
 	);
+	arrowMesh.scale.set(scaleFactor * 0.5, scaleFactor * 0.5, scaleFactor * 0.5);
+	
+	const pathTextureGroup = new THREE.Group();
+	const connectorTextureGroup = new THREE.Group();
 	
 	const customLayer = {
 		id: 'points-3d-model',
@@ -272,50 +276,32 @@ async function renderPointsAndArrows(maplibre, path) {
 			});
 			this.renderer.autoClear = false;
 			
-			const pArr = instructionsToSceneCoordPoints(sceneOriginMercator, instructions, 3)
+			const pArr = instructionsToSceneCoordPoints(sceneOriginMercator, instructions, 3);
 			pArr.forEach(({coordinates, identifier}, i) => {
 				if (i === 0 || i === pArr.length - 1) {
 					const geoModel = markerModel.clone();
 					geoModel.position.set(coordinates[0], coordinates[1] + 4, coordinates[2]);
 					this.scene.add(geoModel);
 				} else {
-					const temArrModel = arrowPlane.clone();
-					const position = identifier === "connector"
-						? [
-							coordinates[0] - 3,
-							coordinates[1] + 3,
-							coordinates[2]
-						]
-						: [
-							coordinates[0],
-							coordinates[1] + 1,
-							coordinates[2]
-						]
-					const next = pArr[i + 1].coordinates;
-					const nextP = identifier === "connector"
-						? [
-							next[0] - 3,
-							coordinates[1] + 3,
-							coordinates[2]
-						]
-						: [
-							next[0],
-							next[1] + 1,
-							next[2]
-						];
-					temArrModel.position.set(...position);
-					temArrModel.lookAt(new THREE.Vector3(...nextP));
-					arrowPlane.scale.set(scaleFactor * 0.5, scaleFactor * 0.5, scaleFactor * 0.5);
-					if (identifier === "path") {
-						// 按照路径方向旋转图片，使其朝向路径方向；默认方向为向上
-						temArrModel.rotateX(Math.PI / 2);
-					} else {
-						temArrModel.rotateY(Math.PI / 2);
-					}
+					const arrow = arrowMesh.clone();
+					const nextCoord = pArr[i + 1].coordinates;
 					
-					this.scene.add(temArrModel);
+					if (identifier === "path") {
+						arrow.position.set(coordinates[0], coordinates[1] + 1, coordinates[2]);
+						arrow.lookAt(new THREE.Vector3(nextCoord[0], nextCoord[1] + 1, nextCoord[2]));
+						arrow.rotateX(Math.PI/2);
+						pathTextureGroup.add(arrow);
+					} else {
+						arrow.position.set(coordinates[0] - 3, coordinates[1] + 3, coordinates[2]);
+						arrow.lookAt(new THREE.Vector3(nextCoord[0] - 3, nextCoord[1] + 3, nextCoord[2]));
+						arrow.rotateX(Math.PI/2);
+						arrow.rotateY(Math.PI/2);
+						connectorTextureGroup.add(arrow);
+					}
 				}
-			})
+			});
+			this.scene.add(pathTextureGroup);
+			this.scene.add(connectorTextureGroup);
 			
 			const light = new THREE.AmbientLight(0xffffff); // 环境光，照亮场景里的所有物体
 			this.scene.add(light);
@@ -396,7 +382,7 @@ function isConnector(sign) {
 	return sign === 100 || sign === -100;
 }
 
-// 将经纬坐标转换为世界坐标
+// 将莫卡托坐标转换为世界坐标
 function fromLngLatToSceneCoord(origin, lngLat, altitude) {
 	const mercator = maplibregl.MercatorCoordinate.fromLngLat(lngLat, altitude);
 	const unit = 1.0 / mercator.meterInMercatorCoordinateUnits();
