@@ -238,9 +238,9 @@ async function render3DModals(maplibre, path) {
 		.scale(new THREE.Vector3(sceneTransform.scale, -sceneTransform.scale, sceneTransform.scale));
 	
 	// 加载marker模型
-	const markerModel = await loadModel();
+	const endMarkerModel = await loadModel();
 	const scaleFactor = 8;
-	markerModel.scale.set(scaleFactor, scaleFactor, scaleFactor);
+	endMarkerModel.scale.set(scaleFactor, scaleFactor, scaleFactor);
 	
 	// 创建一个平面几何体来渲染箭头
 	const loader = new THREE.TextureLoader();
@@ -278,10 +278,22 @@ async function render3DModals(maplibre, path) {
 			
 			const pArr = getRouteSplits(sceneOriginMercator, path, 3);
 			pArr.forEach(({coordinates, identifier}, i) => {
-				if (i === 0 || i === pArr.length - 1) {
-					const geoModel = markerModel.clone();
-					geoModel.position.set(coordinates[0], coordinates[1] + 4, coordinates[2]);
-					markerGroup.add(geoModel);
+				if (i === 0) {
+					const startMarker = endMarkerModel.clone(true);
+					startMarker.traverse((node) => {
+						if (node.isMesh && node.material.name === "red") {
+							// 克隆材质
+							const clonedMaterial = node.material.clone();
+							clonedMaterial.color.set(0x366ceb); // 设置为蓝色
+							node.material = clonedMaterial; // 替换材质
+						}
+					});
+					startMarker.position.set(coordinates[0], coordinates[1] + 4, coordinates[2]);
+					markerGroup.add(startMarker);
+				} else if (i === pArr.length - 1) {
+					const endMarker = endMarkerModel.clone();
+					endMarker.position.set(coordinates[0], coordinates[1] + 4, coordinates[2]);
+					markerGroup.add(endMarker);
 				} else {
 					const nextCoord = pArr[i + 1].coordinates;
 					
@@ -316,9 +328,6 @@ async function render3DModals(maplibre, path) {
 
 async function loadModel() {
 	const loader = new GLTFLoader();
-	/*const gltf = await loader.loadAsync(
-		'https://maplibre.org/maplibre-gl-js/docs/assets/34M_17/34M_17.gltf'
-	);*/
 	const gltf = await loader.loadAsync('./assets/red-point.gltf');
 	return gltf.scene;
 }
