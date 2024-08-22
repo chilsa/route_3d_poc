@@ -276,7 +276,7 @@ async function render3DModals(maplibre, path) {
 			});
 			this.renderer.autoClear = false;
 			
-			const pArr = getRouteSplits(sceneOriginMercator, path, 3);
+			const pArr = getRouteSplits(sceneOriginMercator, path);
 			pArr.forEach(({coordinates, identifier}, i) => {
 				if (i === 0) {
 					const startMarker = endMarkerModel.clone(true);
@@ -367,7 +367,7 @@ function addConnectorArrows(position, nextPosition, texture) {
 	return [...xTextures, ...zTextures];
 }
 
-function getRouteSplits(originPoint, path, breakCnt = 0) {
+function getRouteSplits(originPoint, path) {
 	const {instructions, points: {coordinates}} = path;
 	
 	return _.flatMap(instructions, (instruction, i) => {
